@@ -1,14 +1,26 @@
 {
   "name": "happy-hour-code",
   "displayName": "Happy Hour Code",
-  "description": "Play Game Boy Advance games from a VS Code sidebar, powered by mGBA.",
+  "description": "Play Game Boy, Game Boy Color and Game Boy Advance games from a VS Code sidebar.",
   "version": "0.0.1",
+  "icon": "icon.png",
+  "author": {
+    "name": "barthxc"
+  },
+  "license": "MIT",
   "engines": {
     "node": ">=22.12.0",
     "vscode": "^1.116.0"
   },
   "categories": [
     "Other"
+  ],
+  "keywords": [
+    "gba",
+    "gameboy",
+    "gbc",
+    "emulator",
+    "retro"
   ],
   "main": "dist/extension.js",
   "contributes": {
