@@ -1,0 +1,38 @@
+# Node
+# Node
+node_modules/
+webview/node_modules/
+
+# Build outputs
+dist/
+build/
+webview/dist/
+
+# Env files
+.env
+.env.*
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# VSCode
+.vscode/
+.history/
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# TypeScript
+*.tsbuildinfo
+
+# Coverage
+coverage/
+
+# IDEs
+.idea/
+.swp
