@@ -1,4 +1,4 @@
-# Momentum Chat Webview (Frontend)
+# Happy Hour Code Webview (Frontend)
 
 ## Scripts principales
 
@@ -8,11 +8,11 @@
 
 ## Estructura
 
-- `src/` — Código fuente React
+- `src/` — Código fuente React (InstallGate, LibraryView, PlayerView con `react-gbajs`)
 - `dist/` — Build final (cargado por la extensión)
 
 ## Notas
 
 - No uses el dev server en VS Code, solo archivos estáticos (`dist`).
-- El estado del chat se persiste usando `acquireVsCodeApi()` y se sincroniza con la extensión.
-- Puedes escalar la UI y lógica aquí como una app React normal.
+- El estado de la UI se persiste usando `acquireVsCodeApi()` y se sincroniza con la extensión.
+- `react-gbajs` es JavaScript puro (sin WASM/Workers), así que no necesita ningún paso de build especial.

@@ -1,126 +1,24 @@
-// Variable para desactivar mensajes informativos
-const mock = false;
-
 import * as vscode from "vscode";
-import WebSocket from "ws";
+import * as fs from "fs";
+import * as path from "path";
 import { getWebviewHtml } from "./webviewHtml";
 
-let ws: WebSocket | null = null;
+const EMULATOR_INSTALLED_KEY = "happyHourCode.emulatorInstalled";
+const ROMS_FOLDER_KEY = "happyHourCode.romsFolder";
+
 let webviewPanel: vscode.WebviewView | null = null;
-let sidebarVisible = false;
 
-// Contador de mensajes no leídos
-let unreadCount = 0;
-
-// Resetea el contador visual (Anti-bug de VS Code)
-function resetUnreadCount() {
-  unreadCount = 0;
-  if (webviewPanel) {
-    webviewPanel.title = "Momentum Chat";
-    // Forzamos el 0 visual primero para que VS Code reaccione y limpie el globo
-    webviewPanel.badge = { value: 0, tooltip: "" };
-
-    setTimeout(() => {
-      if (webviewPanel) webviewPanel.badge = undefined;
-    }, 100);
+function listGames(romsFolder: string | undefined): string[] {
+  if (!romsFolder) {
+    return [];
   }
-}
-
-let chatState: any = {
-  room: null,
-  username: null,
-  messages: [],
-  users: [],
-};
-
-function connectWebSocket() {
-  if (ws) return;
-
-  ws = new WebSocket("wss://momentum-chat-server.onrender.com");
-
-  ws.on("open", () => {
-    console.log("[EXT] WebSocket conectado");
-    if (chatState.room && chatState.username) {
-      ws?.send(
-        JSON.stringify({
-          type: "join",
-          room: chatState.room,
-          name: chatState.username,
-        }),
-      );
-    }
-  });
-
-  ws.on("message", (data) => {
-    try {
-      const msg = JSON.parse(data.toString());
-
-      if (msg.type === "chat") {
-        const messageObj = {
-          role: msg.name === chatState.username ? "user" : "bot",
-          content: msg.message,
-          name: msg.name,
-        };
-        chatState.messages.push(messageObj);
-
-        // Si el panel NO está visible en pantalla, subimos contador y notificamos
-        if (!sidebarVisible) {
-          unreadCount++;
-          if (webviewPanel) {
-            webviewPanel.title = `Momentum Chat (${unreadCount})`;
-            webviewPanel.badge = { value: unreadCount, tooltip: "Mensajes no leídos" };
-          }
-          const sender = msg.name || "Otro";
-          vscode.window.showInformationMessage(`${sender}: ${msg.message}`);
-        }
-
-        // Enviamos siempre a React en segundo plano
-        if (webviewPanel) {
-          postToWebview({
-            type: "chat",
-            name: msg.name,
-            message: msg.message,
-            role: messageObj.role,
-            playSound: !sidebarVisible // 🔔 Solo sonará si el panel estaba oculto
-          });
-        }
-      }
-      else if (msg.type === "joined") {
-        chatState.room = msg.room;
-        chatState.username = msg.name;
-        chatState.messages = [];
-        resetUnreadCount();
-        postToWebview({ type: "joined", room: msg.room, username: msg.name });
-      }
-      else if (msg.type === "room-users") {
-        chatState.users = msg.users;
-        postToWebview({ type: "room-users", payload: msg });
-      }
-      else if (msg.type === "room-closed") {
-        chatState.room = null;
-        resetUnreadCount();
-        postToWebview({ type: "room-closed", payload: msg });
-      }
-      else if (msg.type === "error") {
-        const errorText = msg.message || msg.error || "";
-        if (typeof errorText === "string" && errorText.toLowerCase().includes("exist")) {
-          chatState.room = null;
-          chatState.username = null;
-          chatState.messages = [];
-          chatState.users = [];
-          resetUnreadCount();
-        }
-        postToWebview({ type: "error", payload: msg });
-      }
-    } catch (e) {
-      console.log("[EXT] Error parseando mensaje WS", e);
-    }
-  });
-
-  ws.on("close", () => {
-    ws = null;
-    postToWebview({ type: "ws-closed" });
-  });
+  try {
+    return fs
+      .readdirSync(romsFolder)
+      .filter((f) => f.toLowerCase().endsWith(".gba"));
+  } catch {
+    return [];
+  }
 }
 
 function postToWebview(msg: any) {
@@ -129,12 +27,30 @@ function postToWebview(msg: any) {
   }
 }
 
-export function activate(context: vscode.ExtensionContext) {
-  if (mock) {
-    console.log("🔥 ACTIVATE EJECUTADO!");
-    vscode.window.showInformationMessage("🔥 Extension activada!");
-  }
+function pickRomsFolder(context: vscode.ExtensionContext) {
+  return vscode.window
+    .showOpenDialog({
+      canSelectFolders: true,
+      canSelectFiles: false,
+      canSelectMany: false,
+      openLabel: "Seleccionar carpeta de ROMs",
+    })
+    .then((uris) => {
+      if (!uris || uris.length === 0) {
+        postToWebview({ type: "romsFolderCancelled" });
+        return;
+      }
+      const folder = uris[0].fsPath;
+      context.globalState.update(ROMS_FOLDER_KEY, folder);
+      postToWebview({
+        type: "romsFolderChosen",
+        folder,
+        games: listGames(folder),
+      });
+    });
+}
 
+export function activate(context: vscode.ExtensionContext) {
   const provider = {
     resolveWebviewView(
       webviewView: vscode.WebviewView,
@@ -142,20 +58,6 @@ export function activate(context: vscode.ExtensionContext) {
       _token: vscode.CancellationToken,
     ) {
       webviewPanel = webviewView;
-      sidebarVisible = webviewView.visible;
-
-      if (sidebarVisible) {
-        resetUnreadCount();
-      }
-
-      // ✅ MODIFICACIÓN AQUÍ: Al cambiar la visibilidad, ya NO disparamos tryRestoreState()
-      // porque React se mantiene vivo de fondo y ya tiene todos los mensajes al día.
-      webviewView.onDidChangeVisibility(() => {
-        sidebarVisible = webviewView.visible;
-        if (sidebarVisible) {
-          resetUnreadCount(); // Solo limpiamos el globo rojo de VS Code
-        }
-      });
 
       webviewView.webview.options = {
         enableScripts: true,
@@ -165,52 +67,48 @@ export function activate(context: vscode.ExtensionContext) {
       };
 
       webviewView.webview.html = getWebviewHtml(context, webviewView.webview);
-      connectWebSocket();
 
       webviewView.webview.onDidReceiveMessage((msg) => {
-        if (msg.type === "reset") {
-          if (ws) {
-            ws.close();
-            ws = null;
+        if (msg.type === "ready") {
+          const emulatorInstalled = context.globalState.get<boolean>(
+            EMULATOR_INSTALLED_KEY,
+            false,
+          );
+          const romsFolder = context.globalState.get<string>(ROMS_FOLDER_KEY);
+          postToWebview({
+            type: "init",
+            emulatorInstalled,
+            romsFolder,
+            games: listGames(romsFolder),
+          });
+        } else if (msg.type === "requestInstall") {
+          context.globalState.update(EMULATOR_INSTALLED_KEY, true);
+          postToWebview({ type: "installed" });
+        } else if (msg.type === "requestRomsFolder") {
+          pickRomsFolder(context);
+        } else if (msg.type === "listGames") {
+          const romsFolder = context.globalState.get<string>(ROMS_FOLDER_KEY);
+          postToWebview({ type: "gamesList", games: listGames(romsFolder) });
+        } else if (msg.type === "loadGame") {
+          const romsFolder = context.globalState.get<string>(ROMS_FOLDER_KEY);
+          if (!romsFolder) {
+            postToWebview({ type: "error", message: "No hay carpeta de ROMs configurada." });
+            return;
           }
-          chatState = { room: null, username: null, messages: [], users: [] };
-          resetUnreadCount();
-          postToWebview({ type: "reset" });
-        }
-        // El evento 'ready' ocurre solo en el arranque inicial o recarga total de la extensión
-        else if (msg.type === "ready") {
-          if (chatState.room && chatState.username) {
-            postToWebview({ type: "restoreState", payload: chatState });
-          } else {
-            postToWebview({ type: "clearStaleState" });
+          try {
+            const filePath = path.join(romsFolder, msg.fileName);
+            const bytes = fs.readFileSync(filePath);
+            postToWebview({
+              type: "gameData",
+              fileName: msg.fileName,
+              data: Array.from(bytes),
+            });
+          } catch (e) {
+            postToWebview({
+              type: "error",
+              message: `No se pudo leer el juego: ${msg.fileName}`,
+            });
           }
-        }
-        else if (msg.type === "join" || msg.type === "create") {
-          chatState = { room: null, username: null, messages: [], users: [] };
-          resetUnreadCount();
-
-          if (!ws || ws.readyState !== 1) {
-            connectWebSocket();
-            if (ws) {
-              ws.once("open", () => {
-                ws?.send(JSON.stringify({ type: msg.type, room: msg.room, name: msg.username }));
-              });
-            }
-          } else {
-            ws?.send(JSON.stringify({ type: msg.type, room: msg.room, name: msg.username }));
-          }
-        } else if (msg.type === "chat") {
-          if (ws && ws.readyState === 1 && chatState.room) {
-            ws.send(JSON.stringify({ type: "chat", message: msg.message }));
-          }
-        } else if (msg.type === "leave") {
-          if (ws) ws.close();
-          chatState.room = null;
-          chatState.messages = [];
-          resetUnreadCount();
-        }
-        else if (msg.type === "clearBadge") {
-          resetUnreadCount();
         }
       });
     },
@@ -218,17 +116,21 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
-      "momentumChat.sidebar",
+      "happyHourCode.sidebar",
       provider,
       {
         webviewOptions: {
-          retainContextWhenHidden: true // Mantiene React latiendo en segundo plano
-        }
-      }
+          retainContextWhenHidden: true, // Mantiene el emulador corriendo en segundo plano
+        },
+      },
     ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("happy-hour-code.changeRomsFolder", () => {
+      pickRomsFolder(context);
+    }),
   );
 }
 
-export function deactivate() {
-  if (ws) ws.close();
-}
+export function deactivate() {}

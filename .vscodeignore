@@ -3,6 +3,9 @@
 out/**
 node_modules/**
 src/**
+webview/node_modules/**
+webview/src/**
+webview/public/**
 .gitignore
 .yarnrc
 esbuild.js

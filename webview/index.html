@@ -3,10 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Momentum Chat Webview</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none';" />
+    <title>Happy Hour Code Webview</title>
   </head>
   <body style="margin: 0; padding: 0; color: #fff; height: 100vh">
     <div id="root" style="height: 100vh"></div>
+    <!-- No es un preload real: solo deja que Vite/webviewHtml.ts reescriban esta URL
+         (ver webview/src/gbaVendor.ts, que la lee e inyecta el script dinámicamente). -->
+    <link rel="prefetch" href="/vendor/react-gbajs.js" id="react-gbajs-vendor-url" />
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

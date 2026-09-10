@@ -24,7 +24,7 @@ export function getWebviewHtml(
   });
 
   // Mejorar CSP para VS Code webview
-  const csp = `default-src 'none'; img-src ${webview.cspSource} https: data:; script-src ${webview.cspSource} 'unsafe-eval'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; connect-src *;`;
+  const csp = `default-src 'none'; img-src ${webview.cspSource} data:; script-src ${webview.cspSource} 'unsafe-eval'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; connect-src ${webview.cspSource};`;
   html = html.replace(
     /<meta http-equiv="Content-Security-Policy" content="[^"]*"\s*\/>/,
     `<meta http-equiv="Content-Security-Policy" content="${csp}" />`,

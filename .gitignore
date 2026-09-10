@@ -7,6 +7,7 @@ webview/node_modules/
 dist/
 build/
 webview/dist/
+webview/public/vendor/react-gbajs.js
 
 # Env files
 .env

@@ -1,9 +1,11 @@
-# Momentum Chat (VS Code Extension)
+# Happy Hour Code (VS Code Extension)
+
+Juega tus ROMs de Game Boy Advance desde el sidebar de VS Code, emulado en JavaScript puro dentro del propio panel (vía [`react-gbajs`](https://github.com/macabeus/react-gbajs), que envuelve el emulador GBA.js de Endrift — el mismo autor de mGBA).
 
 ## Monorepo
 
 - `/src` — Extensión VS Code (backend)
-- `/webview` — App React (frontend)
+- `/webview` — App React (frontend), incluye el núcleo del emulador (`react-gbajs`)
 
 ## Instalación y build
 
@@ -12,42 +14,49 @@
    npm install
    cd webview && npm install
    ```
-2. Compila el frontend:
+2. Compila todo (frontend + extensión):
    ```sh
    npm run build
-   # desde /webview
    ```
-3. Compila la extensión:
-   ```sh
-   cd ..
-   npm run compile
-   ```
-4. Ejecuta en VS Code (F5 o "Run Extension")
+3. Ejecuta en VS Code (F5 o "Run Extension")
+
+## Uso
+
+1. Al abrir el panel "Happy Hour Code" por primera vez, se pide instalar el emulador (aceptar una vez).
+2. Se pide seleccionar la carpeta donde están tus archivos `.gba`. Queda guardada como carpeta por defecto.
+3. Se listan los juegos encontrados; haz clic en uno para jugarlo, embebido en el propio panel.
+4. `Esc` pausa/reanuda el juego (pulsar una vez congela, pulsar otra vez continúa). Cerrar u ocultar el panel no pierde el estado (el webview sigue vivo en segundo plano).
+
+### Controles (por defecto, sin configuración)
+
+| Tecla | Botón GBA |
+|---|---|
+| Flechas | D-pad |
+| `X` | A |
+| `Z` | B |
+| `Enter` | Start |
+| `\` | Select |
+| `A` | L |
+| `S` | R |
+| `Esc` | Pausar / reanudar (no es un botón del juego) |
 
 ## Desarrollo
 
-- El frontend se construye con Vite y se carga como archivos estáticos.
-- El backend usa esbuild para bundle.
-- El estado del chat se persiste en frontend y backend (no se pierde al cerrar el sidebar).
+- El frontend se construye con Vite y se carga como archivos estáticos dentro del webview.
+- El backend usa esbuild para el bundle.
+- `react-gbajs` es JavaScript puro (sin WebAssembly ni Web Workers), así que se integra como cualquier dependencia npm normal — sin pasos de build especiales ni requisitos de aislamiento de origen cruzado. (Se evaluó primero `@thenick775/mgba-wasm`, el núcleo real de mGBA compilado a WASM con hilos, pero requiere `SharedArrayBuffer`/`crossOriginIsolated`, algo que los webviews de extensiones de VS Code no exponen — no hay forma de activarlo desde la extensión.)
+- Trae su propia BIOS de reemplazo integrada (sin BIOS oficial de Nintendo).
 
 ## Estructura
 
-- `/src/webviewProvider.ts` — Lógica del sidebar y persistencia
-- `/src/webviewHtml.ts` — HTML del webview
-- `/webview/src` — React app
+- `/src/extension.ts` — Lógica del sidebar, instalación, carpeta de ROMs y persistencia
+- `/src/webviewHtml.ts` — HTML del webview y CSP
+- `/webview/src` — React app (InstallGate, LibraryView, PlayerView con `react-gbajs`)
 
 ## Notas
 
 - No uses Webpack ni mezcles frontend/backend.
-- El icono del sidebar está en `icon.png` (puedes reemplazarlo).
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+- El icono del sidebar está en `icon.svg`.
 
 ---
 
@@ -57,17 +66,9 @@ Ensure that you've read through the extensions guidelines and follow the best pr
 
 - [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
 
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-- Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-- Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-- Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
 ## For more information
 
 - [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-- [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+- [mGBA](https://mgba.io/)
 
 **Enjoy!**

@@ -1,8 +1,8 @@
 {
-  "name": "momentum-chat",
-  "displayName": "momentum-chat",
-  "description": "",
-  "version": "0.0.5",
+  "name": "happy-hour-code",
+  "displayName": "Happy Hour Code",
+  "description": "Play Game Boy Advance games from a VS Code sidebar, powered by mGBA.",
+  "version": "0.0.1",
   "engines": {
     "node": ">=22.12.0",
     "vscode": "^1.116.0"
@@ -10,33 +10,30 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "*"
-  ],
   "main": "dist/extension.js",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "momentumChat",
-          "title": "Momentum Chat",
+          "id": "happyHourCode",
+          "title": "Happy Hour Code",
           "icon": "./icon.svg"
         }
       ]
     },
     "views": {
-      "momentumChat": [
+      "happyHourCode": [
         {
-          "id": "momentumChat.sidebar",
-          "name": "Momentum Chat",
+          "id": "happyHourCode.sidebar",
+          "name": "Happy Hour Code",
           "type": "webview"
         }
       ]
     },
     "commands": [
       {
-        "command": "momentum-chat.helloWorld",
-        "title": "Hello World"
+        "command": "happy-hour-code.changeRomsFolder",
+        "title": "Happy Hour Code: Change ROMs Folder…"
       }
     ]
   },
@@ -62,7 +59,6 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.19.17",
     "@types/vscode": "^1.116.0",
-    "@types/ws": "^8.18.1",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.27.3",
@@ -71,8 +67,5 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1"
   },
-  "dependencies": {
-    "ws": "^8.20.0"
-  },
-  "publisher": "MomentumChat"
+  "publisher": "HappyHourCode"
 }
