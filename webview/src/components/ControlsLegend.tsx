@@ -1,17 +1,29 @@
 import React from "react";
 
-const KEYS: Array<[string, string]> = [
+const SHARED_KEYS: Array<[string, string]> = [
   ["↑ ↓ ← →", "D-pad"],
   ["X", "A"],
   ["Z", "B"],
   ["Enter", "Start"],
   ["\\", "Select"],
-  ["A", "L"],
-  ["S", "R"],
-  ["Esc", "Pausar / reanudar"],
 ];
 
-export default function ControlsLegend() {
+const SHOULDER_KEYS: Array<[string, string]> = [
+  ["A", "L"],
+  ["S", "R"],
+];
+
+const PAUSE_KEY: [string, string] = ["Esc", "Pausar / reanudar"];
+
+type Props = {
+  // GB/GBC no tienen botones L/R (gatillos), solo existen en GBA.
+  includeShoulders?: boolean;
+};
+
+export default function ControlsLegend({ includeShoulders = true }: Props) {
+  const KEYS = includeShoulders
+    ? [...SHARED_KEYS, ...SHOULDER_KEYS, PAUSE_KEY]
+    : [...SHARED_KEYS, PAUSE_KEY];
   return (
     <div
       style={{

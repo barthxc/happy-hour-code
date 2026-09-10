@@ -3,19 +3,20 @@ import * as fs from "fs";
 import * as path from "path";
 import { getWebviewHtml } from "./webviewHtml";
 
-const EMULATOR_INSTALLED_KEY = "happyHourCode.emulatorInstalled";
+const ONBOARDED_KEY = "happyHourCode.onboarded";
 const ROMS_FOLDER_KEY = "happyHourCode.romsFolder";
 
 let webviewPanel: vscode.WebviewView | null = null;
 
-function listGames(romsFolder: string | undefined): string[] {
-  if (!romsFolder) {
-    return [];
-  }
+const ROM_EXTENSIONS = [".gba", ".gb", ".gbc"];
+
+type GameSource = "bundled" | "user";
+
+function listGamesIn(folder: string): string[] {
   try {
     return fs
-      .readdirSync(romsFolder)
-      .filter((f) => f.toLowerCase().endsWith(".gba"));
+      .readdirSync(folder)
+      .filter((f) => ROM_EXTENSIONS.some((ext) => f.toLowerCase().endsWith(ext)));
   } catch {
     return [];
   }
@@ -27,11 +28,15 @@ function postToWebview(msg: any) {
   }
 }
 
-function quickStatePath(romsFolder: string, fileName: string): string {
-  return path.join(romsFolder, ".happy-hour-code-saves", `${fileName}.state.json`);
+// Todas las partidas guardadas (también las de los juegos incluidos con la
+// extensión) viven en la carpeta del usuario, nunca dentro de la propia
+// extensión: ese directorio no es un buen sitio para escribir (puede
+// reinstalarse/actualizarse y perder los datos).
+function quickStatePath(romsFolder: string, source: GameSource, fileName: string): string {
+  return path.join(romsFolder, ".happy-hour-code-saves", source, `${fileName}.state.json`);
 }
 
-function pickRomsFolder(context: vscode.ExtensionContext) {
+function pickRomsFolder(context: vscode.ExtensionContext, bundledGamesFolder: string) {
   return vscode.window
     .showOpenDialog({
       canSelectFolders: true,
@@ -49,12 +54,15 @@ function pickRomsFolder(context: vscode.ExtensionContext) {
       postToWebview({
         type: "romsFolderChosen",
         folder,
-        games: listGames(folder),
+        bundledGames: listGamesIn(bundledGamesFolder),
+        userGames: listGamesIn(folder),
       });
     });
 }
 
 export function activate(context: vscode.ExtensionContext) {
+  const bundledGamesFolder = path.join(context.extensionPath, "games");
+
   const provider = {
     resolveWebviewView(
       webviewView: vscode.WebviewView,
@@ -74,37 +82,45 @@ export function activate(context: vscode.ExtensionContext) {
 
       webviewView.webview.onDidReceiveMessage((msg) => {
         if (msg.type === "ready") {
-          const emulatorInstalled = context.globalState.get<boolean>(
-            EMULATOR_INSTALLED_KEY,
-            false,
-          );
+          const onboarded = context.globalState.get<boolean>(ONBOARDED_KEY, false);
           const romsFolder = context.globalState.get<string>(ROMS_FOLDER_KEY);
           postToWebview({
             type: "init",
-            emulatorInstalled,
+            onboarded,
             romsFolder,
-            games: listGames(romsFolder),
+            bundledGames: listGamesIn(bundledGamesFolder),
+            userGames: romsFolder ? listGamesIn(romsFolder) : [],
           });
-        } else if (msg.type === "requestInstall") {
-          context.globalState.update(EMULATOR_INSTALLED_KEY, true);
-          postToWebview({ type: "installed" });
         } else if (msg.type === "requestRomsFolder") {
-          pickRomsFolder(context);
+          pickRomsFolder(context, bundledGamesFolder).then(() => {
+            // La carpeta es obligatoria: en cuanto se elige una por primera vez,
+            // el asistente de bienvenida se da por completado.
+            if (context.globalState.get<string>(ROMS_FOLDER_KEY)) {
+              context.globalState.update(ONBOARDED_KEY, true);
+            }
+          });
         } else if (msg.type === "listGames") {
           const romsFolder = context.globalState.get<string>(ROMS_FOLDER_KEY);
-          postToWebview({ type: "gamesList", games: listGames(romsFolder) });
+          postToWebview({
+            type: "gamesList",
+            bundledGames: listGamesIn(bundledGamesFolder),
+            userGames: romsFolder ? listGamesIn(romsFolder) : [],
+          });
         } else if (msg.type === "loadGame") {
+          const source: GameSource = msg.source === "bundled" ? "bundled" : "user";
           const romsFolder = context.globalState.get<string>(ROMS_FOLDER_KEY);
-          if (!romsFolder) {
+          const baseFolder = source === "bundled" ? bundledGamesFolder : romsFolder;
+          if (!baseFolder) {
             postToWebview({ type: "error", message: "No hay carpeta de ROMs configurada." });
             return;
           }
           try {
-            const filePath = path.join(romsFolder, msg.fileName);
+            const filePath = path.join(baseFolder, msg.fileName);
             const bytes = fs.readFileSync(filePath);
             postToWebview({
               type: "gameData",
               fileName: msg.fileName,
+              source,
               data: Array.from(bytes),
             });
           } catch (e) {
@@ -114,16 +130,17 @@ export function activate(context: vscode.ExtensionContext) {
             });
           }
         } else if (msg.type === "saveQuickState") {
+          const source: GameSource = msg.source === "bundled" ? "bundled" : "user";
           const romsFolder = context.globalState.get<string>(ROMS_FOLDER_KEY);
           if (!romsFolder) {
             postToWebview({ type: "error", message: "No hay carpeta de ROMs configurada." });
             return;
           }
           try {
-            const statePath = quickStatePath(romsFolder, msg.fileName);
+            const statePath = quickStatePath(romsFolder, source, msg.fileName);
             fs.mkdirSync(path.dirname(statePath), { recursive: true });
             fs.writeFileSync(statePath, msg.stateJson);
-            postToWebview({ type: "quickStateSaved", fileName: msg.fileName });
+            postToWebview({ type: "quickStateSaved", fileName: msg.fileName, source });
           } catch (e) {
             postToWebview({
               type: "error",
@@ -131,19 +148,20 @@ export function activate(context: vscode.ExtensionContext) {
             });
           }
         } else if (msg.type === "loadQuickState") {
+          const source: GameSource = msg.source === "bundled" ? "bundled" : "user";
           const romsFolder = context.globalState.get<string>(ROMS_FOLDER_KEY);
           if (!romsFolder) {
             postToWebview({ type: "error", message: "No hay carpeta de ROMs configurada." });
             return;
           }
-          const statePath = quickStatePath(romsFolder, msg.fileName);
+          const statePath = quickStatePath(romsFolder, source, msg.fileName);
           if (!fs.existsSync(statePath)) {
-            postToWebview({ type: "quickStateNotFound", fileName: msg.fileName });
+            postToWebview({ type: "quickStateNotFound", fileName: msg.fileName, source });
             return;
           }
           try {
             const stateJson = fs.readFileSync(statePath, "utf-8");
-            postToWebview({ type: "quickStateData", fileName: msg.fileName, stateJson });
+            postToWebview({ type: "quickStateData", fileName: msg.fileName, source, stateJson });
           } catch (e) {
             postToWebview({
               type: "error",
@@ -169,7 +187,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("happy-hour-code.changeRomsFolder", () => {
-      pickRomsFolder(context);
+      pickRomsFolder(context, bundledGamesFolder);
     }),
   );
 }

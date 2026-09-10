@@ -8,9 +8,14 @@
   </head>
   <body style="margin: 0; padding: 0; color: #fff; height: 100vh">
     <div id="root" style="height: 100vh"></div>
-    <!-- No es un preload real: solo deja que Vite/webviewHtml.ts reescriban esta URL
-         (ver webview/src/gbaVendor.ts, que la lee e inyecta el script dinámicamente). -->
+    <!-- No son preloads reales: solo dejan que Vite/webviewHtml.ts reescriban estas URLs
+         (ver webview/src/gbaVendor.ts y gbVendor.ts, que las leen e inyectan los scripts
+         dinámicamente en el orden correcto). -->
     <link rel="prefetch" href="/vendor/react-gbajs.js" id="react-gbajs-vendor-url" />
+    <link rel="prefetch" href="/vendor/gameboy-online/resampler.js" id="gb-resampler-url" />
+    <link rel="prefetch" href="/vendor/gameboy-online/XAudioServer.js" id="gb-xaudioserver-url" />
+    <link rel="prefetch" href="/vendor/gameboy-online/GameBoyCore.js" id="gb-core-url" />
+    <link rel="prefetch" href="/vendor/gameboy-online/GameBoyIO.js" id="gb-io-url" />
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

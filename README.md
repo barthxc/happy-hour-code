@@ -1,11 +1,12 @@
 # Happy Hour Code (VS Code Extension)
 
-Juega tus ROMs de Game Boy Advance desde el sidebar de VS Code, emulado en JavaScript puro dentro del propio panel (vía [`react-gbajs`](https://github.com/macabeus/react-gbajs), que envuelve el emulador GBA.js de Endrift — el mismo autor de mGBA).
+Juega tus ROMs de Game Boy, Game Boy Color y Game Boy Advance desde el sidebar de VS Code, emulado en JavaScript puro dentro del propio panel: GBA vía [`react-gbajs`](https://github.com/macabeus/react-gbajs) (envuelve GBA.js de Endrift, el mismo autor de mGBA); GB/GBC vía [GameBoy-Online](https://github.com/taisel/GameBoy-Online) de Grant Galitz.
 
 ## Monorepo
 
 - `/src` — Extensión VS Code (backend)
-- `/webview` — App React (frontend), incluye el núcleo del emulador (`react-gbajs`)
+- `/webview` — App React (frontend), incluye los núcleos del emulador
+- `/games` — Juegos incluidos con la extensión, siempre disponibles (ver "Uso")
 
 ## Instalación y build
 
@@ -22,10 +23,11 @@ Juega tus ROMs de Game Boy Advance desde el sidebar de VS Code, emulado en JavaS
 
 ## Uso
 
-1. Al abrir el panel "Happy Hour Code" por primera vez, se pide instalar el emulador (aceptar una vez).
-2. Se pide seleccionar la carpeta donde están tus archivos `.gba`. Queda guardada como carpeta por defecto.
-3. Se listan los juegos encontrados; haz clic en uno para jugarlo, embebido en el propio panel.
+1. Al abrir el panel "Happy Hour Code" por primera vez, un asistente de 3 pasos explica la extensión y **obliga** a elegir una carpeta propia de ROMs (`.gba`/`.gb`/`.gbc`) — es obligatoria porque ahí se guardan siempre las partidas rápidas, también las de los juegos incluidos, para que no se pierdan al actualizar la extensión.
+2. La librería muestra dos secciones: **Incluidos con la extensión** (los de `/games`, siempre disponibles, no requieren descargar nada) y **Tu carpeta** (los tuyos).
+3. Haz clic en un juego para jugarlo, embebido en el propio panel.
 4. `Esc` pausa/reanuda el juego (pulsar una vez congela, pulsar otra vez continúa). Cerrar u ocultar el panel no pierde el estado (el webview sigue vivo en segundo plano).
+5. 💾/📂 arriba del reproductor: guardado y carga rápida (un estado completo, no solo la partida SRAM).
 
 ### Controles (por defecto, sin configuración)
 
@@ -49,9 +51,9 @@ Juega tus ROMs de Game Boy Advance desde el sidebar de VS Code, emulado en JavaS
 
 ## Estructura
 
-- `/src/extension.ts` — Lógica del sidebar, instalación, carpeta de ROMs y persistencia
+- `/src/extension.ts` — Lógica del sidebar, asistente de bienvenida, carpeta de ROMs y persistencia
 - `/src/webviewHtml.ts` — HTML del webview y CSP
-- `/webview/src` — React app (InstallGate, LibraryView, PlayerView con `react-gbajs`)
+- `/webview/src` — React app (OnboardingWizard, LibraryView, PlayerView con `react-gbajs`, GbPlayerView con GameBoy-Online)
 
 ## Notas
 

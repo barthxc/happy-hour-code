@@ -9,6 +9,9 @@ build/
 webview/dist/
 webview/public/vendor/react-gbajs.js
 
+# Partidas guardadas (nunca deben vivir dentro de la propia extensión/repo)
+games/.happy-hour-code-saves/
+
 # Env files
 .env
 .env.*

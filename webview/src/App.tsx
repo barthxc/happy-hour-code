@@ -1,19 +1,34 @@
 import React, { useEffect, useState } from "react";
 import { loadReactGbajs } from "./gbaVendor";
 import { vscode } from "./vscodeApi";
-import type { AppView, ExtensionMessage, GameEntry } from "./types";
-import InstallGate from "./components/InstallGate";
+import {
+  getConsoleType,
+  type AppView,
+  type ExtensionMessage,
+  type GameEntry,
+  type GameSource,
+  type PendingGame,
+  type QuickState,
+} from "./types";
+import OnboardingWizard from "./components/OnboardingWizard";
 import LibraryView from "./components/LibraryView";
 import PlayerView from "./components/PlayerView";
+import GbPlayerView from "./components/GbPlayerView";
 
-type PendingGame = { fileName: string; data: Uint8Array } | null;
-type QuickState = { fileName: string; state: unknown } | null;
 type GbaVendor = Awaited<ReturnType<typeof loadReactGbajs>>;
+
+function mergeGames(bundledGames: string[], userGames: string[]): GameEntry[] {
+  return [
+    ...bundledGames.map((fileName): GameEntry => ({ fileName, source: "bundled" })),
+    ...userGames.map((fileName): GameEntry => ({ fileName, source: "user" })),
+  ];
+}
 
 export default function App() {
   const [view, setView] = useState<AppView>("loading");
-  const [emulatorInstalled, setEmulatorInstalled] = useState(false);
+  const [onboarded, setOnboarded] = useState(false);
   const [romsFolder, setRomsFolder] = useState<string | undefined>(undefined);
+  const [pickingFolder, setPickingFolder] = useState(false);
   const [games, setGames] = useState<GameEntry[]>([]);
   const [pendingGame, setPendingGame] = useState<PendingGame>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -42,43 +57,48 @@ export default function App() {
       if (!data || typeof data !== "object") return;
 
       if (data.type === "init") {
-        setEmulatorInstalled(data.emulatorInstalled);
+        setOnboarded(data.onboarded);
         setRomsFolder(data.romsFolder);
-        setGames(data.games.map((fileName) => ({ fileName })));
+        setGames(mergeGames(data.bundledGames, data.userGames));
 
-        if (!data.emulatorInstalled) {
-          setView("installGate");
+        if (!data.onboarded || !data.romsFolder) {
+          setView("wizard");
           return;
         }
 
         const saved = vscode.getState() as
-          | { lastGameFileName?: string }
+          | { lastGameFileName?: string; lastGameSource?: GameSource }
           | undefined;
+        const allFileNames = [...data.bundledGames, ...data.userGames];
         if (
           !restoredRef.current &&
           saved?.lastGameFileName &&
-          data.games.includes(saved.lastGameFileName)
+          saved.lastGameSource &&
+          allFileNames.includes(saved.lastGameFileName)
         ) {
           restoredRef.current = true;
           setView("player");
           setLoadingGame(saved.lastGameFileName);
-          vscode.postMessage({ type: "loadGame", fileName: saved.lastGameFileName });
+          vscode.postMessage({
+            type: "loadGame",
+            fileName: saved.lastGameFileName,
+            source: saved.lastGameSource,
+          });
         } else {
           setView("library");
         }
-      } else if (data.type === "installed") {
-        setEmulatorInstalled(true);
-        setView("library");
       } else if (data.type === "romsFolderChosen") {
         setRomsFolder(data.folder);
-        setGames(data.games.map((fileName) => ({ fileName })));
+        setGames(mergeGames(data.bundledGames, data.userGames));
+        setPickingFolder(false);
+        setOnboarded(true);
         setView("library");
       } else if (data.type === "romsFolderCancelled") {
-        // sin cambios
+        setPickingFolder(false);
       } else if (data.type === "gamesList") {
-        setGames(data.games.map((fileName) => ({ fileName })));
+        setGames(mergeGames(data.bundledGames, data.userGames));
       } else if (data.type === "gameData") {
-        setPendingGame({ fileName: data.fileName, data: new Uint8Array(data.data) });
+        setPendingGame({ fileName: data.fileName, source: data.source, data: new Uint8Array(data.data) });
         setView("player");
         setLoadingGame(null);
       } else if (data.type === "error") {
@@ -87,7 +107,7 @@ export default function App() {
       } else if (data.type === "quickStateSaved") {
         setQuickStateNotice("Guardado rápido creado.");
       } else if (data.type === "quickStateData") {
-        setQuickState({ fileName: data.fileName, state: JSON.parse(data.stateJson) });
+        setQuickState({ fileName: data.fileName, source: data.source, state: JSON.parse(data.stateJson) });
         setQuickStateNotice(null);
       } else if (data.type === "quickStateNotFound") {
         setQuickStateNotice("No hay guardado rápido para este juego todavía.");
@@ -99,13 +119,22 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    vscode.setState({ view, lastGameFileName: pendingGame?.fileName });
+    vscode.setState({
+      view,
+      lastGameFileName: pendingGame?.fileName,
+      lastGameSource: pendingGame?.source,
+    });
   }, [view, pendingGame]);
 
-  const handlePlay = (fileName: string) => {
+  const handlePlay = (fileName: string, source: GameSource) => {
     setErrorMessage(null);
     setLoadingGame(fileName);
-    vscode.postMessage({ type: "loadGame", fileName });
+    vscode.postMessage({ type: "loadGame", fileName, source });
+  };
+
+  const handlePickFolder = () => {
+    setPickingFolder(true);
+    vscode.postMessage({ type: "requestRomsFolder" });
   };
 
   if (vendorError) {
@@ -122,19 +151,25 @@ export default function App() {
   }
 
   const { GbaProvider, GbaContext, ReactGbaJs } = gbaVendor;
+  const activeConsoleType = pendingGame ? getConsoleType(pendingGame.fileName) : null;
+  const bundledGamesCount = games.filter((g) => g.source === "bundled").length;
 
   return (
     <GbaProvider>
       <div style={{ height: "100vh", width: "100vw", overflow: "hidden" }}>
-        {view === "installGate" && (
-          <InstallGate onAccept={() => vscode.postMessage({ type: "requestInstall" })} />
+        {view === "wizard" && (
+          <OnboardingWizard
+            bundledGamesCount={bundledGamesCount}
+            onPickFolder={handlePickFolder}
+            pickingFolder={pickingFolder}
+          />
         )}
 
-        {emulatorInstalled && view === "library" && (
+        {onboarded && romsFolder && view === "library" && (
           <LibraryView
             romsFolder={romsFolder}
             games={games}
-            onChangeFolder={() => vscode.postMessage({ type: "requestRomsFolder" })}
+            onChangeFolder={handlePickFolder}
             onPlay={handlePlay}
             loadingGame={loadingGame}
           />
@@ -159,13 +194,25 @@ export default function App() {
           </div>
         )}
 
-        {emulatorInstalled && (
+        {onboarded && romsFolder && activeConsoleType === "gba" && (
           <PlayerView
             visible={view === "player"}
             pendingGame={pendingGame}
             onBack={() => setView("library")}
             GbaContext={GbaContext}
             ReactGbaJs={ReactGbaJs}
+            quickState={quickState}
+            onQuickStateConsumed={() => setQuickState(null)}
+            quickStateNotice={quickStateNotice}
+            onDismissNotice={() => setQuickStateNotice(null)}
+          />
+        )}
+
+        {onboarded && romsFolder && activeConsoleType === "gb" && (
+          <GbPlayerView
+            visible={view === "player"}
+            pendingGame={pendingGame}
+            onBack={() => setView("library")}
             quickState={quickState}
             onQuickStateConsumed={() => setQuickState(null)}
             quickStateNotice={quickStateNotice}

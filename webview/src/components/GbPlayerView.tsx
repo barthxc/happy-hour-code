@@ -1,5 +1,5 @@
-import React, { useContext, useEffect, useRef, useState } from "react";
-import type { GbaContextValue, ReactGbaJsProps } from "../gbaVendor";
+import React, { useEffect, useRef, useState } from "react";
+import { loadGameBoyCore, type GbApi } from "../gbVendor";
 import { vscode } from "../vscodeApi";
 import type { PendingGame, QuickState } from "../types";
 import ControlsLegend from "./ControlsLegend";
@@ -9,40 +9,65 @@ type Props = {
   visible: boolean;
   pendingGame: PendingGame;
   onBack: () => void;
-  GbaContext: React.Context<GbaContextValue>;
-  ReactGbaJs: React.ComponentType<ReactGbaJsProps>;
   quickState: QuickState;
   onQuickStateConsumed: () => void;
   quickStateNotice: string | null;
   onDismissNotice: () => void;
 };
 
-// Resolución nativa del canvas interno de ReactGbaJs con scale=2 (240x160 * 2).
-const NATIVE_WIDTH = 480;
-const NATIVE_HEIGHT = 320;
+// Resolución nativa de GB/GBC (160x144) x2.
+const NATIVE_WIDTH = 320;
+const NATIVE_HEIGHT = 288;
 
-export default function PlayerView({
+const KEY_MAP: Record<string, string> = {
+  ArrowUp: "up",
+  ArrowDown: "down",
+  ArrowLeft: "left",
+  ArrowRight: "right",
+  x: "a",
+  X: "a",
+  z: "b",
+  Z: "b",
+  Enter: "start",
+  "\\": "select",
+};
+
+export default function GbPlayerView({
   visible,
   pendingGame,
   onBack,
-  GbaContext,
-  ReactGbaJs,
   quickState,
   onQuickStateConsumed,
   quickStateNotice,
   onDismissNotice,
 }: Props) {
-  const { gba, play, saveState } = useContext(GbaContext);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const apiRef = useRef<GbApi | null>(null);
   const loadedFileRef = useRef<string | null>(null);
   const manuallyPausedRef = useRef(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [cssScale, setCssScale] = useState(1);
 
+  useEffect(() => {
+    let cancelled = false;
+    loadGameBoyCore()
+      .then((api) => {
+        if (!cancelled) apiRef.current = api;
+      })
+      .catch((e) => !cancelled && setError(String(e)));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Cargar el juego pedido (nuevo o el mismo con un guardado rápido pendiente)
   useEffect(() => {
-    if (!pendingGame) return;
+    if (!pendingGame || !canvasRef.current) return;
+    const api = apiRef.current;
+    if (!api) return;
     const isNewGame = loadedFileRef.current !== pendingGame.fileName;
     const hasQuickState =
       quickState &&
@@ -52,15 +77,77 @@ export default function PlayerView({
 
     loadedFileRef.current = pendingGame.fileName;
     setLoading(true);
-    play({
-      newRomBuffer: pendingGame.data,
-      restoreState: hasQuickState ? quickState!.state : undefined,
-    });
+    setError(null);
+    try {
+      api.start(canvasRef.current, pendingGame.data);
+      if (hasQuickState) {
+        const instance = api.getInstance();
+        instance?.returnFromState(quickState!.state);
+      }
+    } catch (e) {
+      setError(String(e));
+    }
     if (hasQuickState) onQuickStateConsumed();
-  }, [pendingGame, quickState, play, onQuickStateConsumed]);
+    window.setTimeout(() => setLoading(false), 300);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingGame, quickState, apiRef.current]);
 
-  // Reescalado responsive: el canvas interno tiene tamaño fijo, así que se
-  // reescala visualmente por CSS para llenar el contenedor disponible.
+  // Teclado: pulsar/soltar se traduce directamente a estado del mando (no hay
+  // mapeo automático como en react-gbajs, hay que hacerlo a mano aquí).
+  useEffect(() => {
+    if (!visible) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        const api = apiRef.current;
+        if (!api) return;
+        if (api.isPaused()) {
+          manuallyPausedRef.current = false;
+          api.resume();
+        } else {
+          manuallyPausedRef.current = true;
+          api.pause();
+        }
+        return;
+      }
+      const mapped = KEY_MAP[e.key];
+      if (mapped) {
+        e.preventDefault();
+        apiRef.current?.keyDown(mapped);
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      const mapped = KEY_MAP[e.key];
+      if (mapped) {
+        e.preventDefault();
+        apiRef.current?.keyUp(mapped);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [visible]);
+
+  // Congelar automáticamente al ocultar el panel, reanudar al volver (salvo
+  // pausa manual con Esc) — mismo criterio que PlayerView (GBA).
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      const api = apiRef.current;
+      if (!api) return;
+      if (document.hidden) {
+        if (!api.isPaused()) api.pause();
+      } else if (api.isPaused() && !manuallyPausedRef.current) {
+        api.resume();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, []);
+
+  // Reescalado responsive (igual que PlayerView).
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -75,51 +162,11 @@ export default function PlayerView({
     return () => observer.disconnect();
   }, []);
 
-  // Esc pausa/reanuda manualmente.
-  useEffect(() => {
-    if (!visible) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        if (!gba) return;
-        if (gba.paused) {
-          manuallyPausedRef.current = false;
-          gba.runStable();
-        } else {
-          manuallyPausedRef.current = true;
-          gba.pause();
-        }
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [visible, gba]);
-
-  // Congelar automáticamente cuando el panel deja de estar visible (cambio de
-  // vista en la barra de actividad, etc.) y reanudar al volver — salvo que la
-  // pausa la hayas puesto tú mismo con Esc, en cuyo caso se respeta.
-  useEffect(() => {
-    const onVisibilityChange = () => {
-      if (!gba) return;
-      if (document.hidden) {
-        if (!gba.paused) {
-          gba.pause();
-        }
-      } else if (gba.paused && !manuallyPausedRef.current) {
-        gba.runStable();
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [gba]);
-
   const handleQuickSave = () => {
     if (!pendingGame) return;
-    // Se serializa a JSON aquí (y no se manda el objeto tal cual) porque
-    // saveState() incluye referencias a funciones en algún punto de su
-    // estructura (audio/video), y postMessage usa structured clone, que no
-    // puede transportar funciones — JSON.stringify las descarta sin más.
-    const stateJson = JSON.stringify(saveState());
+    const instance = apiRef.current?.getInstance();
+    if (!instance) return;
+    const stateJson = JSON.stringify(instance.saveState());
     vscode.postMessage({
       type: "saveQuickState",
       fileName: pendingGame.fileName,
@@ -159,7 +206,7 @@ export default function PlayerView({
         }}>
         <button
           onClick={() => {
-            gba?.pause();
+            apiRef.current?.pause();
             onBack();
           }}
           style={{
@@ -246,7 +293,12 @@ export default function PlayerView({
             transform: `scale(${cssScale || 1})`,
             transformOrigin: "center center",
           }}>
-          <ReactGbaJs scale={2} volume={0.5} onFpsReported={() => setLoading(false)} />
+          <canvas
+            ref={canvasRef}
+            width={NATIVE_WIDTH}
+            height={NATIVE_HEIGHT}
+            style={{ width: NATIVE_WIDTH, height: NATIVE_HEIGHT, imageRendering: "pixelated" }}
+          />
           {loading && (
             <div
               style={{
@@ -264,10 +316,27 @@ export default function PlayerView({
               <span style={{ fontSize: 13 }}>Cargando juego…</span>
             </div>
           )}
+          {error && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 12,
+                background: "#000",
+                color: "#f48771",
+                fontSize: 12,
+                textAlign: "center",
+              }}>
+              ⚠️ {error}
+            </div>
+          )}
         </div>
       </div>
 
-      <ControlsLegend />
+      <ControlsLegend includeShoulders={false} />
     </div>
   );
 }
