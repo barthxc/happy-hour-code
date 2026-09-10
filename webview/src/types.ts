@@ -11,4 +11,7 @@ export type ExtensionMessage =
   | { type: "romsFolderCancelled" }
   | { type: "gamesList"; games: string[] }
   | { type: "gameData"; fileName: string; data: number[] }
+  | { type: "quickStateSaved"; fileName: string }
+  | { type: "quickStateData"; fileName: string; stateJson: string }
+  | { type: "quickStateNotFound"; fileName: string }
   | { type: "error"; message: string };

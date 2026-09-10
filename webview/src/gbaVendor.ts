@@ -27,11 +27,13 @@ export type PlayArgs = {
 export type GbaContextValue = {
   gba: Gba | undefined;
   play: (args: PlayArgs) => boolean;
+  saveState: () => unknown;
 };
 
 export type ReactGbaJsProps = {
   scale?: number;
   volume?: number;
+  onFpsReported?: (fps: number) => void;
 };
 
 type ReactGbajsExports = {

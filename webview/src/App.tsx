@@ -7,6 +7,7 @@ import LibraryView from "./components/LibraryView";
 import PlayerView from "./components/PlayerView";
 
 type PendingGame = { fileName: string; data: Uint8Array } | null;
+type QuickState = { fileName: string; state: unknown } | null;
 type GbaVendor = Awaited<ReturnType<typeof loadReactGbajs>>;
 
 export default function App() {
@@ -18,6 +19,9 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [gbaVendor, setGbaVendor] = useState<GbaVendor | null>(null);
   const [vendorError, setVendorError] = useState<string | null>(null);
+  const [quickState, setQuickState] = useState<QuickState>(null);
+  const [quickStateNotice, setQuickStateNotice] = useState<string | null>(null);
+  const [loadingGame, setLoadingGame] = useState<string | null>(null);
 
   // Recordar qué se estaba jugando para relanzarlo si el webview se recrea por completo
   // (recarga de ventana / reinicio de VS Code). El ocultar/mostrar el panel NO pasa por
@@ -57,6 +61,7 @@ export default function App() {
         ) {
           restoredRef.current = true;
           setView("player");
+          setLoadingGame(saved.lastGameFileName);
           vscode.postMessage({ type: "loadGame", fileName: saved.lastGameFileName });
         } else {
           setView("library");
@@ -75,8 +80,17 @@ export default function App() {
       } else if (data.type === "gameData") {
         setPendingGame({ fileName: data.fileName, data: new Uint8Array(data.data) });
         setView("player");
+        setLoadingGame(null);
       } else if (data.type === "error") {
         setErrorMessage(data.message);
+        setLoadingGame(null);
+      } else if (data.type === "quickStateSaved") {
+        setQuickStateNotice("Guardado rápido creado.");
+      } else if (data.type === "quickStateData") {
+        setQuickState({ fileName: data.fileName, state: JSON.parse(data.stateJson) });
+        setQuickStateNotice(null);
+      } else if (data.type === "quickStateNotFound") {
+        setQuickStateNotice("No hay guardado rápido para este juego todavía.");
       }
     };
 
@@ -90,6 +104,7 @@ export default function App() {
 
   const handlePlay = (fileName: string) => {
     setErrorMessage(null);
+    setLoadingGame(fileName);
     vscode.postMessage({ type: "loadGame", fileName });
   };
 
@@ -121,6 +136,7 @@ export default function App() {
             games={games}
             onChangeFolder={() => vscode.postMessage({ type: "requestRomsFolder" })}
             onPlay={handlePlay}
+            loadingGame={loadingGame}
           />
         )}
 
@@ -150,6 +166,10 @@ export default function App() {
             onBack={() => setView("library")}
             GbaContext={GbaContext}
             ReactGbaJs={ReactGbaJs}
+            quickState={quickState}
+            onQuickStateConsumed={() => setQuickState(null)}
+            quickStateNotice={quickStateNotice}
+            onDismissNotice={() => setQuickStateNotice(null)}
           />
         )}
       </div>

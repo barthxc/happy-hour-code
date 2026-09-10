@@ -1,14 +1,22 @@
 import React from "react";
 import type { GameEntry } from "../types";
+import Spinner from "./Spinner";
 
 type Props = {
   romsFolder: string | undefined;
   games: GameEntry[];
   onChangeFolder: () => void;
   onPlay: (fileName: string) => void;
+  loadingGame: string | null;
 };
 
-export default function LibraryView({ romsFolder, games, onChangeFolder, onPlay }: Props) {
+export default function LibraryView({
+  romsFolder,
+  games,
+  onChangeFolder,
+  onPlay,
+  loadingGame,
+}: Props) {
   if (!romsFolder) {
     return (
       <div
@@ -88,27 +96,45 @@ export default function LibraryView({ romsFolder, games, onChangeFolder, onPlay 
             No se encontraron archivos .gba en esta carpeta.
           </div>
         ) : (
-          games.map((game) => (
-            <div
-              key={game.fileName}
-              onClick={() => onPlay(game.fileName)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "10px 12px",
-                borderRadius: 6,
-                cursor: "pointer",
-                marginBottom: 4,
-              }}
-              onMouseOver={(e) =>
-                (e.currentTarget.style.background = "var(--vscode-list-hoverBackground)")
-              }
-              onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}>
-              <span style={{ fontSize: 18 }}>🕹️</span>
-              <span style={{ fontSize: 13 }}>{game.fileName}</span>
-            </div>
-          ))
+          games.map((game) => {
+            const isLoadingThis = loadingGame === game.fileName;
+            const disabled = loadingGame !== null && !isLoadingThis;
+            return (
+              <div
+                key={game.fileName}
+                onClick={() => !disabled && !isLoadingThis && onPlay(game.fileName)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 12px",
+                  borderRadius: 6,
+                  cursor: disabled ? "default" : "pointer",
+                  marginBottom: 4,
+                  opacity: disabled ? 0.4 : 1,
+                }}
+                onMouseOver={(e) => {
+                  if (!disabled) {
+                    e.currentTarget.style.background = "var(--vscode-list-hoverBackground)";
+                  }
+                }}
+                onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}>
+                {isLoadingThis ? (
+                  <span style={{ width: 18, height: 18, display: "flex" }}>
+                    <Spinner size={16} />
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 18 }}>🕹️</span>
+                )}
+                <span style={{ fontSize: 13 }}>{game.fileName}</span>
+                {isLoadingThis && (
+                  <span style={{ fontSize: 11, opacity: 0.75, marginLeft: "auto" }}>
+                    Cargando…
+                  </span>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
     </div>

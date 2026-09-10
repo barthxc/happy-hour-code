@@ -27,6 +27,10 @@ function postToWebview(msg: any) {
   }
 }
 
+function quickStatePath(romsFolder: string, fileName: string): string {
+  return path.join(romsFolder, ".happy-hour-code-saves", `${fileName}.state.json`);
+}
+
 function pickRomsFolder(context: vscode.ExtensionContext) {
   return vscode.window
     .showOpenDialog({
@@ -107,6 +111,43 @@ export function activate(context: vscode.ExtensionContext) {
             postToWebview({
               type: "error",
               message: `No se pudo leer el juego: ${msg.fileName}`,
+            });
+          }
+        } else if (msg.type === "saveQuickState") {
+          const romsFolder = context.globalState.get<string>(ROMS_FOLDER_KEY);
+          if (!romsFolder) {
+            postToWebview({ type: "error", message: "No hay carpeta de ROMs configurada." });
+            return;
+          }
+          try {
+            const statePath = quickStatePath(romsFolder, msg.fileName);
+            fs.mkdirSync(path.dirname(statePath), { recursive: true });
+            fs.writeFileSync(statePath, msg.stateJson);
+            postToWebview({ type: "quickStateSaved", fileName: msg.fileName });
+          } catch (e) {
+            postToWebview({
+              type: "error",
+              message: `No se pudo guardar el estado: ${msg.fileName}`,
+            });
+          }
+        } else if (msg.type === "loadQuickState") {
+          const romsFolder = context.globalState.get<string>(ROMS_FOLDER_KEY);
+          if (!romsFolder) {
+            postToWebview({ type: "error", message: "No hay carpeta de ROMs configurada." });
+            return;
+          }
+          const statePath = quickStatePath(romsFolder, msg.fileName);
+          if (!fs.existsSync(statePath)) {
+            postToWebview({ type: "quickStateNotFound", fileName: msg.fileName });
+            return;
+          }
+          try {
+            const stateJson = fs.readFileSync(statePath, "utf-8");
+            postToWebview({ type: "quickStateData", fileName: msg.fileName, stateJson });
+          } catch (e) {
+            postToWebview({
+              type: "error",
+              message: `No se pudo cargar el estado: ${msg.fileName}`,
             });
           }
         }
